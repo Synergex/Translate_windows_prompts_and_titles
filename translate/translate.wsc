@@ -1,0 +1,29 @@
+.script
+.date_generated "01/05/1999, 15:15"
+.version "6.3.1"
+
+.input window, 5, 60
+.placement 3, 6
+.title "English title[French title]{Spanish title}"
+.line Line1, 24, pos(3, 37)
+.field Field2, a1, pos(3, 43), prompt(" English text "), fpos(2, -
+     26), user("{Spanish text}[French text]")
+.field field1, a6, pos(2, 2), prompt("English prompt      "), fpos(2, -
+     24), user("[French prompt]{Spanish prompt}"), -
+     selwnd(1, 2, "select_en")
+.end
+.select Select_EN
+.item  "One"
+.item  "Two"
+.item  "Three"
+.end
+.select Select_FR
+.item "Un"
+.item "Duex"
+.item "Trois"
+.end
+.select Select_sp
+.item "Uno"
+.item "Dos"
+.item "Tres"
+.end

@@ -1,0 +1,251 @@
+.main translate
+;----------------------------------------------------------------------
+;	Program:	translate
+;	Description:	This is a test program for translation of windows prompts and titles
+;	Author:		Kenneth J. Beers, Synergex
+;	Date:		1/5/1999 (10:36am)
+;
+.include "WND:tools.def"
+
+    record
+  win_id	,i4
+  search	,i4
+  error		,i4
+
+    record data
+  field1	,a6
+		,a100
+
+.proc
+    xcall u_start("winlib")
+    xcall setlog("LANGUAGE","English",search)
+    xcall tkp_ildinp(win_id, g_utlib, "window",, search, error)
+    xcall i_input(win_id,,data)			; to check selection window
+    xcall u_window(D_DELETE, win_id)
+    xcall setlog("LANGUAGE","French", search)
+    xcall tkp_ildinp(win_id, g_utlib, "window",, search, error)
+    xcall i_input(win_id,,data)			; to check selection window
+    xcall u_window(D_DELETE, win_id)
+    xcall setlog("LANGUAGE","Spanish",search)
+    xcall tkp_ildinp(win_id, g_utlib, "window",, search, error)
+    xcall i_input(win_id,,data)			; to check selection window
+    xcall u_window(D_DELETE, win_id)
+    xcall u_finish
+    stop
+.end
+
+
+.subroutine tkp_ildinp
+;----------------------------------------------------------------------
+;Description:
+;	This is translating version of i_ldinp.  
+;Function:
+;	This routine performs run-time translation of input windows
+;	based on the value of the environment variable named "LANGUAGE".  
+;	   If the value is "FRENCH" the French version will be used
+;	   if the value is "SPANISH" the Spanish version will be used
+;	If the variable is undefined(or blank) the routine will 
+;	function as i_ldinp, but will check the title for any translation
+;	values, and strip them from the title.
+;	The routine changes the title, all prompts, selection windows, 
+;	and "psuedo-text" (but not really!)
+;
+;	For a complete description on how to use this routine, see the
+;	translate.doc file (Microsoft Word-97 format) in this directory.
+;
+;Author:   Ken Beers, Synergex
+;Date:     Jan 4, 1999
+;
+;Caveats:
+;	While every effort has been made to make this routine usable, it is 
+;	not supported by Synergex, nor should it be construed to be part of
+;	the software covered by any support contract, now or in the future.
+;	If any bugs are found, I would appreciate knowing about them and will
+;	make every possible effort to remedy them.
+;	
+;	Users are encouraged to modify the code to fit their unique situation,
+;	but this is at your own risk.
+;
+;Assumptions:
+;	This routine expects that the prompts and titles of windows will 
+;	be delimited by the characters .defined below.  If the user wants
+;	to utilize a different set of delimiters, simply change the .defines.
+;	
+;	It is assumed that there will be selection windows for each language,
+;	and that their names will be identical with the exception of the last
+;	three characters.  These characters must be an underscore("_"), followed
+;	by the first two characters of the **_TEXT .defines below.
+;	
+;	i.e. select_EN, select_FR, and select_SP
+;	
+;	If no selection window is able to be found, the original is left in place.
+;       
+;Arguments
+;
+;	These arguments match exactly the arguments required for i_ldinp.
+;	This routine is designed to globally replace that routine.
+;
+a_winid 	,n		; Required,returned
+a_winlib        ,n		; Optional
+a_name  	,a		; Required
+a_place         ,n		; Optional
+a_search        ,n		; Optional,returned
+a_error 	,n		; Optional,returned
+a_savedname	,a		; Optional
+;       end of arguments
+
+.include "WND:tools.def"
+.include "WND:windows.def"
+.include "WND:fldinf.def"
+
+.define BLANKS, "                                                "
+.define L1_TEXT,	"FRENCH"	; Language identifier
+.define L1_START,	"["		; Start of the text
+.define L1_END,	 	"]"		; End of the text
+.define L2_TEXT,	"SPANISH"       ; Language identifier
+.define L2_START,	"{"		; Start of the text
+.define L2_END,		"}"		; End of the text
+
+.align
+record
+  win_id		,i4
+  winlib		,i4
+  search		,i4
+  error   		,i4
+  continue		,i4
+  fnum    		,i4
+  sel_id 		,i4
+  start  		,i4
+  length 		,i4
+  place  		,i4
+  field_name		,a32
+  sel_name  		,a15
+  user_text 		,a80 
+  new_prompt		,a80
+  title     		,a80 
+  title_value   	,[2]d3
+  language      	,a10
+  token_start		,a1
+  token_end		,a1
+  language_token	,a3
+
+.proc
+        call initialize			; check for required conditions
+        if (continue) call load_window
+        if (continue) call change_title
+        if (continue .and. language_token) call change_prompts
+        call shutdown                   ; never returns, imbedded XRETURN
+
+initialize,
+        continue = TRUE
+        xcall getlog('LANGUAGE',language,length)
+	upcase language
+	using language select
+	  (L1_TEXT),			; French
+	   begin
+	    token_start = L1_START
+	    token_end = L1_END
+	    language_token = "_" + L1_TEXT
+	   end
+	  (L2_TEXT), 			; Spanish
+	   begin
+	    token_start = L2_START
+	    token_end = L2_END
+	    language_token = "_" + L2_TEXT
+	   end
+	  (), clear token_start,token_end,language_token 	
+	endusing
+        if (%passed(a_winlib))
+          then
+            winlib = a_winlib
+          else
+            winlib = g_utlib
+        if (%passed(a_place))
+          then place = a_place
+          else clear place
+        return
+
+load_window,
+	if (%passed(a_savedname)) 
+	  then
+	    xcall i_ldinp(win_id, winlib, a_name, place, search, error, a_savedname)
+	  else
+	    xcall i_ldinp(win_id, winlib, a_name, place, search, error)
+        if (error) 
+	  continue = FALSE
+	return
+
+change_title,
+        xcall w_info(WI_TITLE,win_id,title,title_value) 	; get the whole title
+	if (language_token) 					; we have a target language
+	then							; so look for translation
+          if(start = %instr(1, %atrim(title), token_start))     ; there is a translation
+            begin
+              start += 1                                  	; get past the token
+              length = %instr(start, title, token_end)-start	; end of the translation title
+              title = title(start:length)         		; get the translated title
+              xcall w_brdr(win_id,WB_TITLE, %atrim(title))	; set the title
+            end
+  	else
+	  begin
+	    if(start = %instr(1,%atrim(title), L1_START))	; there's a french string
+	      title = title(1:start-1)				; so get rid of it
+	    if(start = %instr(1,%atrim(title), L2_START))	; there's a spanish string
+	      title = title(1:start-1)				; so get rid of it
+	      xcall w_brdr(win_id,WB_TITLE, %atrim(title))	; and now, set the title
+	  end
+        return
+
+change_prompts,
+	clear fnum    
+	if (language_token) 					; translation needed    
+          repeat
+            begin
+              incr fnum                                       	; field number in the set
+              clear field_name,sel_id,user_text
+              xcall i_fldinf(win_id, field_name, fnum,,, sel_id); get the field name
+              if (field_name .eq. BLANKS) 
+                exitloop                                      	; end of fields in the set
+              xcall i_user(win_id, field_name, user_text)	; get the user text
+              start = %instr(1, user_text, token_start)+ 1	; find the beginning
+              if (start -1)
+	        if (length = %instr(start, user_text, token_end)) - start
+	          begin
+	            length -= start
+	            new_prompt = user_text(start:length)
+		    xcall i_prompt(win_id, field_name, %atrim(new_prompt))
+                  end
+                if (sel_id)
+                  begin
+		    clear sel_name
+                    xcall w_info(WI_NAME, sel_id, sel_name)	; get the sel window name
+                    sel_name = %atrim(sel_name) - ("_EN") + language_token
+                    xcall u_ldwnd(sel_id, winlib, sel_name, D_NOPLC, search, error)
+		      if (error)				; could not find the window
+                      then         				; do not perpetuate error
+			clear error
+                      else					; associate the new window 
+			xcall i_fldsel(win_id, field_name, sel_id)
+                  end
+            end
+        return
+
+shutdown,
+      if (error) 
+        then
+          begin
+            clear win_id
+            if %passed(a_error)                 ; return the error
+                a_error = error
+          end
+        else
+          begin
+            a_winid = win_id
+            if %passed(a_error)
+              clear a_error
+            if (%passed(a_search))
+              a_search = search
+          end					; This internal routine NEVER
+      xreturn					; does an internal return!!
+.end
+
